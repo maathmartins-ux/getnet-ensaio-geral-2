@@ -320,7 +320,7 @@ conta como **resolvida** sem humano, com todo fato de referência e com fonte.
 - **Humano**: conferência às cegas de respostas ao vivo na página de rotulagem (2 exemplos de treino com gabarito,
   depois cada resposta sem a nota automática nem o veredito do juiz), com a concordância entre as pessoas e com o juiz
   em `docs/RESULTS.md`; held-out escrito por autores cegos (passa/falha ponta a ponta; a intenção é diagnóstico).
-  No relógio rodaram: suíte offline, gate do eval, fumaça ao vivo dos oficiais e a bateria ao vivo integral (oficiais e memória com 3 repetições, juiz no mesmo processo) mais a ablação do replanejamento nas perguntas reais. Imagem, smoke do container e 2 réplicas (`check.py --docker --scale`) rodam no job `check` da CI do commit final (link no topo): o container da sessão de construção não tem docker. {{RODADA_2_E_VIDEO}}
+  No relógio rodaram: suíte offline, gate do eval, fumaça ao vivo dos oficiais e a bateria ao vivo integral (oficiais e memória com 3 repetições, juiz no mesmo processo) mais a ablação do replanejamento nas perguntas reais. Imagem, smoke do container e 2 réplicas (`check.py --docker --scale`) rodam no job `check` da CI do commit final (link no topo): o container da sessão de construção não tem docker. O que ficou de fora desta entrega está no §7, com a causa.
 
 ## 7. Perguntas da entrevista, respondidas
 

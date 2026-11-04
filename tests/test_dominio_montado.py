@@ -46,3 +46,17 @@ def test_mount_declares_the_origin_in_procedencia(tmp_path, monkeypatch):
     assert text.index("Domínio montado") < text.index("## 1. O kit")
     d.mount(root)  # de novo: o bloco é trocado, nunca duplicado
     assert (root / "docs" / "PROCEDENCIA.md").read_text(encoding="utf-8").count(d.BLOCK_BEGIN) == 1
+
+
+
+def test_mounted_readme_has_no_template_marker():
+    """Ensaio geral da rodada 15: um `{{RODADA_2_E_VIDEO}}` no README montado fez o teste do README (e o pré-voo)
+    tratá-lo como o modelo do kit e esperar o exemplo do domínio de exemplo: PRÉ-VOO FALHOU na largada."""
+    from pathlib import Path
+
+    readme = Path(__file__).resolve().parents[1] / "docs" / "kit" / "dominio" / "files" / "README.md"
+    if not readme.exists():
+        import pytest
+
+        pytest.skip("sem docs/kit (fora da entrega)")
+    assert "{{" not in readme.read_text(encoding="utf-8")
