@@ -436,6 +436,8 @@ def step_view(result: AgentResult, mask=lambda text: text) -> dict:
     for key in ("operator", "answered_live", "from_memory"):
         if result.facts.get(key):
             view[key] = result.facts[key]
+    if dropped := result.facts.get("missing_dropped"):  # parcial no motor: o que faltava e não foi pedido
+        view["missing_dropped"] = [mask(" ".join(str(x).split()))[:PREVIEW_CHARS] for x in dropped]
     if result.pending_action:
         view["pending_action"] = result.pending_action
     if result.handoff and result.handoff.ticket_id:

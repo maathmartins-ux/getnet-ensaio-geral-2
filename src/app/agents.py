@@ -1156,6 +1156,26 @@ def coverage_of(reply: str) -> tuple[str, str, str | None]:
     return "ok", body, None
 
 
+def missing_items(reply: str) -> list[str]:
+    """Todos os itens das linhas `MISSING: x` da resposta do redator (coverage_of devolve só o último)."""
+    return [m.group(1).strip().rstrip(".") for m in _MISSING_LINE.finditer(reply) if m.group(1).strip()]
+
+
+def neighbor_missing(ctx: Context, reply: str) -> list[str]:
+    """Os itens marcados `MISSING` quando NENHUM foi pedido pelo cliente (app.coverage: termo em comum com a pergunta,
+    a versão autônoma e a parte do agente, com glossário); [] = a resposta segue parcial (algum item pedido, ou nenhum
+    item nomeado, como o NOT_IN_SOURCES com citação). Ensaio 14, lição 7: parcial por item vizinho decidido aqui,
+    no motor, e não só no prompt."""
+    from .coverage import judge_missing
+
+    items = missing_items(reply)
+    if not items:
+        return []
+    questions = [ctx.text, ctx.facts.get("standalone") or "", (ctx.facts.get("ask") or {}).get("faq") or ""]
+    asked, _ = judge_missing(items, questions, expand_query)
+    return [] if asked else items
+
+
 def _say_missing(ctx: Context, text: str, missing: str | None) -> str:
     """O cliente lê o que falta: se o texto parcial não disse, a frase vai no fim (template nosso)."""
     from .claims import states_absence
@@ -1255,6 +1275,14 @@ def faq_agent(ctx: Context) -> AgentResult:
                     return AgentResult("faq", "insufficient", sources=sources, reason="not_in_sources",
                                        evidence=evidence, facts=facts)
                 body = customer_terms(cite_ids(body, hits))
+                if status == "partial" and (neighbors := neighbor_missing(ctx, text)):
+                    from .coverage import drop_neighbor_absence
+
+                    # item vizinho, que o cliente não pediu: a resposta é completa; a frase de falta dele sai do texto
+                    body, _gone = drop_neighbor_absence(body, neighbors)
+                    facts["missing_dropped"] = neighbors
+                    METRICS.inc("faq_missing_neighbor_total")
+                    status = "ok"
                 if status == "partial":
                     facts["missing"] = missing or ""
                     return AgentResult("faq", "partial", text=_say_missing(ctx, body, missing), sources=sources,
