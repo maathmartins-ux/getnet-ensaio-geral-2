@@ -61,7 +61,7 @@ CALIBRATION = HERE / "judge_calibration.jsonl"
 # Custo estimado por chamada antes da 1ª medida. Smoke ao vivo de 31/10/2026: 10 chamadas do Opus custaram
 # US$ 0,0653 (0,0065 cada); 0,02 travou a rodada com saldo sobrando. 0,01 mantém ~50% de folga.
 # Depois da 1ª chamada vale o maior entre isto e a média medida.
-USD_PER_CALL = 0.01
+USD_PER_CALL = 0.025  # medido em 04/11: ~US$ 0,020–0,023 por chamada do juiz (Opus, effort medium)
 
 
 def load_calibration(path: Path | None = None) -> list[dict]:
@@ -648,7 +648,10 @@ def run(llm, inputs: list[Path], calibration: Path | None = None, max_usd: float
     # Gasto DESTA execução do juiz, somado das respostas dele (não do contador do request): com os splits julgados
     # no mesmo processo da bateria, o contador compartilhado fazia o saldo comum cair mais rápido que o gasto real e
     # o juiz parava com teto sobrando (medido: memória julgada em 55 de 96 com US$ 2,3 livres).
-    calls, spent_box = [0], [0.0]
+    # `reserved`: a estimativa das chamadas em voo. Sem ela, as JUDGE_WORKERS chamadas paralelas passavam juntas pela
+    # mesma folga (o gasto só entra quando a resposta volta) e o teto estourava (medido em 04/11: --max-usd 0,52 gastou
+    # 0,645; --resume com 0,25 gastou 0,35). Canários e calibração passam pela mesma conta.
+    calls, spent_box, reserved, finished = [0], [0.0], [0.0], [0]
     calls_lock = threading.Lock()
     from app.config import PRICES_PER_MTOK
 
@@ -663,10 +666,12 @@ def run(llm, inputs: list[Path], calibration: Path | None = None, max_usd: float
     def judge_one(item: dict, question: str, answer: str, today: str | None = None) -> dict:
         with calls_lock:
             spent = spent_box[0]
-            est = max(USD_PER_CALL, spent / calls[0] if calls[0] else 0.0)
-            if max_usd is not None and spent + est > max_usd + 1e-9:  # projeta: só chama se a próxima cabe
+            est = max(USD_PER_CALL, spent / finished[0] if finished[0] else 0.0)
+            # projeta com as chamadas em voo: só chama se esta cabe junto com as que ainda não voltaram
+            if max_usd is not None and spent + reserved[0] + est > max_usd + 1e-9:
                 raise BudgetExceeded
             calls[0] += 1
+            reserved[0] += est
         context = item.get("context")
         sources = context or _sources_text(item.get("source_ids", []), item.get("sources"), item.get("evidence"))
         who = f"Cliente autenticado: {item['user_id']}\n\n" if item.get("user_id") else ""
@@ -676,10 +681,17 @@ def run(llm, inputs: list[Path], calibration: Path | None = None, max_usd: float
         prompt = PROMPT.format(today=today or judge_date(item), question=question, who=who, sources=sources,
                                tools=tools, answer=answer, absences=absences_text(answer))
         before = request_usage()["cost_usd"]
-        reply = llm.complete(SYSTEM, [{"role": "user", "content": prompt}], max_tokens=4096, schema=SCHEMA)
+        try:
+            reply = llm.complete(SYSTEM, [{"role": "user", "content": prompt}], max_tokens=4096, schema=SCHEMA)
+        except BaseException:
+            with calls_lock:
+                reserved[0] -= est
+            raise
         counted = request_usage()["cost_usd"] - before
         with calls_lock:
+            reserved[0] -= est
             spent_box[0] += _cost(reply, counted)
+            finished[0] += 1
         return enforce_absence_rule(reply.json())
 
     status, verdicts, pairs_by_split = "ran", [], defaultdict(list)
@@ -699,7 +711,8 @@ def run(llm, inputs: list[Path], calibration: Path | None = None, max_usd: float
     reused = bool(reuse_trust and prev_can.get("ran") == len(can_list) and prev_can.get("details")
                   and [c.get("id") for c in prev_can["details"]] == [c["id"] for c in can_list]
                   and isinstance(prev_cal, list) and len(prev_cal) == len(calib)
-                  and (previous or {}).get("model") == llm.model)
+                  and (previous or {}).get("model") == llm.model
+                  and (previous or {}).get("prompt_sha") in (None, PROMPT_SHA))
     cal_refused: list[dict] = []
     try:
         if reused:
@@ -981,7 +994,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.resume and OUT.exists():
                 old = json.loads(OUT.read_text(encoding="utf-8"))
                 previous = old if str(old.get("status", "")).startswith("aborted") else None
-            report = run(get_judge_llm(), inputs, max_usd=args.max_usd, previous=previous)
+            # --resume do MESMO juiz (modelo e prompt) reaproveita canários e calibração já pagos (medido em 04/11:
+            # o --resume os rodava de novo e gastava mais que os vereditos que faltavam)
+            report = run(get_judge_llm(), inputs, max_usd=args.max_usd, previous=previous, reuse_trust=True)
         except LLMError as exc:
             report = {"status": "error", "reason": str(exc), "live_files": [p.name for p in inputs]}
     OUT.parent.mkdir(parents=True, exist_ok=True)
