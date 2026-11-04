@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches-ignore: ["maestra/**", "fix/**", "fork/**", "probe/**", "dependabot/**"]  # ramos de trabalho: a CI que vale é a do main
+    branches-ignore: ["kit-fonte", "maestra/**", "fix/**", "fork/**", "probe/**", "dependabot/**"]  # kit-fonte e ramos de trabalho: a CI que vale é a do main
   pull_request:
   # sinal cedo (PLAYBOOK §2.2): a maestra dispara à mão no commit do gate (~T+20); fica fora do grupo dos pushes e
   # chega ao fim. Ensaio 14: cada push cancelou a CI anterior e só a do último commit terminou, depois do T+59.

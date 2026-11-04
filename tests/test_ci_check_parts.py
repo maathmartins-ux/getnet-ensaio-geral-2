@@ -166,3 +166,11 @@ def test_dependabot_prs_run_only_the_light_job():
     for name in ("check", "postgres", "retrieval", "supply-chain"):
         assert jobs[name].get("if") == "github.actor != 'dependabot[bot]'", name
     assert "if" not in jobs["offline-tests"]  # o PR do Dependabot ainda é testado
+
+
+def test_kit_source_branch_does_not_run_ci():
+    """O push do kit-fonte (T−30, antes do relógio) disparava uma CI completa de 10 jobs à toa, na mesma fila da CI
+    do scaffold (getnet-ensaio-geral-2, 04/11)."""
+    wf = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    on = wf.get("on", wf.get(True))
+    assert "kit-fonte" in on["push"]["branches-ignore"]
