@@ -340,8 +340,8 @@ def test_long_repetitive_input_stays_fast(word):
         return word * n_words + word[:tail]
 
     best = _cpu_best_of_5(pre_check, sample(reps))
-    if best < 0.05:
-        return
+    if best < 0.1:  # o quadrático media ~400 ms; abaixo de 100 ms é linear mesmo com a máquina carregada (ensaio geral
+        return      # da rodada 15: a suíte do pré-voo roda ao lado do fetch_models e do eval aquecido)
     half = _cpu_best_of_5(pre_check, sample(reps // 2))
     # teto 200 ms (o bug quadrático media ~400 ms): com 100 ms o teste falhava às vezes com a suíte em -n 4 (ensaio
     # 13); a prova de linearidade é a razão inteiro / metade
@@ -355,7 +355,9 @@ def test_long_repetitive_input_stays_fast(word):
 ])
 def test_email_mask_is_linear_on_long_tokens(text):
     best = _cpu_best_of_5(guardrails.mask_pii, text)
-    assert best < 0.02, f"{best * 1000:.1f} ms"
+    # o bug era quadrático (~400 ms); linear mede ~10–20 ms parado e 23 ms com a máquina carregada (ensaio geral da
+    # rodada 15: pré-voo com a suíte -n 4 ao lado do fetch_models reprovou em 20 ms). 80 ms separa os dois com folga
+    assert best < 0.08, f"{best * 1000:.1f} ms"
     assert guardrails.mask_pii("fale com joao.silva+loja@mail.exemplo.com.br hoje")[0] == "fale com [EMAIL] hoje"
 
 
